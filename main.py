@@ -2,82 +2,39 @@
 
 # Import and initialize the pygame library
 import random
-
+from datetime import datetime
+import numpy as np
+import tensorflow as tf
+import gym
+import os
+import datetime
+from gym import wrappers
 import pygame
+import game
 pygame.init()
 
-from pygame.locals import (
-    K_UP,
-    K_DOWN,
-    K_LEFT,
-    K_RIGHT,
-    K_ESCAPE,
-    K_w,
-    K_s,
-    KEYDOWN,
-    QUIT,
-    K_KP_1,
-    K_KP_4,
-)
-
-# Set up the drawing window
-screen = pygame.display.set_mode([1280, 720])
-
-food = [screen.get_width() / 2, screen.get_height() / 2]
-
-class player:
-    def __init__(self, x, y, width, height):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height =height
+#https://www.youtube.com/watch?v=VGkcmBaeAGM
+#https://github.com/python-engineer/snake-ai-pytorch/blob/main/agent.py
 
 
-
-p1 = player(100, 200, 10, 10)
-# Run until the user asks to quit
-running = True
-while running:
-
-    # Did the user click the window close button?
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-    # Fill the background with white
-    screen.fill((255, 255, 255))
-
-    # Draw a solid blue circle in the center
-    pygame.draw.rect(screen, (0, 0, 255), (food[0], food[1], 40, 40))
-
-    pygame.draw.rect(screen, (255,0, 255), (p1.x, p1.y, p1.width, p1.height))
-
-    keys = pygame.key.get_pressed()
-
-    if keys[pygame.K_w]:
-        p1.y-=0.3
-
-    if keys[pygame.K_a]:
-        p1.x -=0.3
-
-    if keys[pygame.K_d]:
-        p1.x+=0.3
-
-    if keys[pygame.K_s]:
-        p1.y+=0.3
-
-    if (p1.y + p1.height) > food[1] and p1.y < (food[1] + 40) \
-            and (p1.x + p1.width) > food[0] and p1.x < (food[0] + 40):
-        food[0] = random.randint(0, screen.get_width() - 40)
-        food[1] = random.randint(0, screen.get_height() - 40)
+food_game = game.Game()
 
 
+while food_game.running:
 
-    # Flip the display
-    pygame.display.flip()
+    final_move = [0, 0, 0, 0]
+    movey = random.randint(0, 2)
+    if movey != 2:
+        final_move[movey] = 1
+    movex = random.randint(2, 4)
+    if movex != 4:
+        final_move[movex] = 1
 
-# Done! Time to quit.
-pygame.quit()
+    print(final_move)
+
+    food_game.play_step(final_move)
+
+
 
 
 #https://towardsdatascience.com/deep-reinforcement-learning-build-a-deep-q-network-dqn-to-play-cartpole-with-tensorflow-2-and-gym-8e105744b998
