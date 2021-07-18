@@ -4,71 +4,64 @@ import torch
 import random
 import numpy as np
 from collections import deque
-from game import Game
-from model import Linear_QNet, QTrainer
-from helper import plot
+
+import tensorflow as tf
+from tensorflow import keras
+import game
 
 
-MAX_MEMORY = 100_000
-BATCH_SIZE = 1000
-LR = 0.001
+
 
 class Agent:
 
-    def __init__(self):
-        self.n_games = 0
-        self.epsilon = 0 # randomness
-        self.gamma = 0.9 # discount rate
-        self.memory = deque(maxlen=MAX_MEMORY) # popleft()
-        self.model = Linear_QNet(4, 256, 4)
-        self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
+    def __init__(self, env: game.Game):
+        learning_rate = 0.5
+        init = tf.keras.initializers.RandomNormal(mean=0., stddev=1.)
+        self.model = keras.Sequential()
+        self.model.add(keras.layers.Input(shape=[env.observations]))
+        self.model.add(keras.layers.Dense(12, activation='relu', kernel_initializer=init))
+        self.model.add(keras.layers.Dense(12, activation='relu', kernel_initializer=init))
+        self.model.add(keras.layers.Dense(env.actions, activation='sigmoid', kernel_initializer=init))
+        self.model.compile(loss=tf.keras.losses.Huber(), optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
+                      metrics=['accuracy'])
+        self.env = env
 
+    def _get_qs(self, state, step):
+        return self.model.predict(state.reshape([1, state.shape[0]]))[0]
 
-    def get_state(self, Game):
+    def train(self, replay_memory, target_model, done):
+        learning_rate = 0.5  # Learning rate
+        discount_factor = 0.7
 
-        state = [Game.py,
-                 Game.px,
-                 Game.food[0],
-                 Game.food[1]]
+        MIN_REPLAY_SIZE = 1000
+        if len(replay_memory) < MIN_REPLAY_SIZE:
+            return
 
-        return np.array(state, dtype=int)
+        batch_size = 64 * 2
+        mini_batch = random.sample(replay_memory, batch_size)
 
-    def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))  # popleft if MAX_MEMORY is reached
+        current_states = np.array(
+            [self.encode_observation(transition[0], self.env.observation_shape) for transition in mini_batch], dtype=int)
 
-    def train_long_memory(self):
-        if len(self.memory) > BATCH_SIZE:
-            mini_sample = random.sample(self.memory, BATCH_SIZE)  # list of tuples
-        else:
-            mini_sample = self.memory
+        current_qs_list = self.model.predict(current_states)
+        new_current_states = np.array(
+            [self.encode_observation(transition[3], self.env.observation_shape) for transition in mini_batch], dtype=int)
+        future_qs_list = target_model.predict(new_current_states)
 
-        states, actions, rewards, next_states, dones = zip(*mini_sample)
-        self.trainer.train_step(states, actions, rewards, next_states, dones)
-        # for state, action, reward, nexrt_state, done in mini_sample:
-        #    self.trainer.train_step(state, action, reward, next_state, done)
+        X = []
+        Y = []
+        for index, (observation, action, reward, new_observation, done) in enumerate(mini_batch):
+            if not done:
+                max_future_q = reward + discount_factor * np.max(future_qs_list[index])
+            else:
+                max_future_q = reward
 
-    def train_short_memory(self, state, action, reward, next_state, done):
-        self.trainer.train_step(state, action, reward, next_state, done)
+            current_qs = current_qs_list[index]
+            current_qs[action] = (1 - learning_rate) * current_qs[action] + learning_rate * max_future_q
 
-    def get_action(self, state):
-        # random moves: tradeoff exploration / exploitation
-        self.epsilon = 80 - self.n_games
-        final_move = [0, 0, 0, 0]
-        if random.randint(0, 200) < self.epsilon:
-            movey = random.randint(0, 2)
-            if movey != 2:
-                final_move[movey] = 1
-            movex = random.randint(2, 4)
-            if movex != 4:
-                final_move[movex] = 1
+            X.append(self.encode_observation(observation, self.env.observations))
+            Y.append(current_qs)
+        self.model.fit(np.array(X), np.array(Y), batch_size=batch_size, verbose=0, shuffle=True)
 
-        else:
-            state0 = torch.tensor(state, dtype=torch.float)
-            prediction = self.model(state0)
-            movey = torch.argmax(prediction[0:1]).item()
-            final_move[movey] = 1
-
-            movex = torch.argmax(prediction[2:3]).item()
-            final_move[movex] = 1
-
-        return final_move
+    def encode_observation(self, observation, n_dims):
+        return observation
